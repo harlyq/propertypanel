@@ -1,4 +1,4 @@
-///<reference path="propertyeditor.ts"/>
+///<reference path='propertyeditor.ts'/>
 module PropertyPanel {
 
     export interface Event {
@@ -30,9 +30,12 @@ module PropertyPanel {
 
         onInput: (event: Event) => void;
         onChange: (event: Event) => void;
+        commitChanges: boolean = true;
 
         constructor(public parent: HTMLElement) {
             this.lastChild = parent.lastChild;
+
+            parent.addEventListener('click', this.onClick.bind(this));
         }
 
         setObjects(objects: any[]): Panel {
@@ -67,6 +70,19 @@ module PropertyPanel {
             if (i !== -1)
                 this.definitionGroups.splice(i, 1);
             return this;
+        }
+
+        private onClick(e) {
+            var elem = e.target;
+            var found = false;
+
+            while (elem && elem instanceof HTMLElement && !found) {
+                found = ( < HTMLElement > elem).classList.contains('PropertyPanelElement');
+                if (!found)
+                    elem = ( < HTMLElement > elem).parentNode;
+            }
+            if (found)
+                this.startEdit(this.findBinding( < HTMLElement > elem));
         }
 
         private findBinding(container: HTMLElement): Binding {
@@ -114,7 +130,7 @@ module PropertyPanel {
                 return null;
 
             // var editorType = definition.editorType;
-            // if (typeof editorType === "undefined") {
+            // if (typeof editorType === 'undefined') {
             //     // how does this work with polymorphic types?
             //     editorType = typeof objects[0][definition.prop];
             // }
@@ -138,7 +154,7 @@ module PropertyPanel {
             if (binding !== this.editing)
                 return; // invalid callback
 
-            if (typeof this.onInput === "function") {
+            if (typeof this.onInput === 'function') {
                 var event: Event = {
                     objects: binding.objects.slice(),
                     prop: binding.definition.prop,
@@ -146,19 +162,31 @@ module PropertyPanel {
                 };
                 this.onInput(event);
             }
+
+            if (this.commitChanges) {
+                binding.setValue(value);
+            }
         }
 
         editorChange(binding: Binding, value: any) {
             if (binding !== this.editing)
                 return; // invalid callback
 
-            if (typeof this.onChange === "function") {
+            if (typeof this.onChange === 'function') {
                 var event: Event = {
                     objects: binding.objects.slice(),
                     prop: binding.definition.prop,
                     value: value
                 };
                 this.onChange(event);
+            }
+
+            if (this.commitChanges) {
+                binding.setValue(value);
+
+                if (this['editing'] && this.editing['editor'] &&
+                    typeof this.editing.editor.refresh === 'function')
+                    this.editing.editor.refresh(this.editing);
             }
 
             this.editing = null;
@@ -180,29 +208,32 @@ module PropertyPanel {
         }
 
         private startEdit(binding) {
-            if (binding.editor !== null && typeof binding.editor === "object") {
+            if (binding.editor !== null && typeof binding.editor === 'object') {
                 if (binding === this.editing)
                     return; // already editing
 
-                if (typeof this.editing.editor.startEdit === "function") {
-                    this.editing = binding;
-                    binding.editor.startEdit(binding,
-                        function(binding, value) {
+                this.stopEdit();
 
-                        });
+                if (typeof binding.editor.startEdit === 'function') {
+                    this.editing = binding;
+                    binding.editor.startEdit(binding, this.editorChange.bind(this), this.editorInput.bind(this));
                 }
             }
         }
 
-        private stopEdit(reason: Reason) {
-            if (this["editing"] && this.editing["editor"] && typeof this.editing.editor.stopEdit === "function") {
-                this.editing.editor.stopEdit(this.editing, reason);
+        private stopEdit() {
+            if (this['editing'] && this.editing['editor']) {
+                if (typeof this.editing.editor.stopEdit === 'function')
+                    this.editing.editor.stopEdit(this.editing);
+
+                if (typeof this.editing.editor.refresh === 'function')
+                    this.editing.editor.refresh(this.editing);
             }
             this.editing = null;
         }
 
         private destroyEditors() {
-            this.stopEdit(Reason.Cancel);
+            this.stopEdit();
 
             // // in reverse, in case a later binding is dependent upon an earlier one
             // for (var i = this.bindings.length - 1; i >= 0; i--) {
@@ -213,7 +244,7 @@ module PropertyPanel {
             this.bindings.length = 0;
 
             // clean-up any elements added by buildEditors
-            if (typeof this.parent === "object") {
+            if (typeof this.parent === 'object') {
                 while (this.parent.lastChild != this.lastChild)
                     this.parent.removeChild(this.parent.lastChild);
             }
@@ -239,7 +270,7 @@ module PropertyPanel {
                     continue;
 
                 binding.container = container;
-                container.classList.add("PropertyPanelElement");
+                container.classList.add('PropertyPanelElement');
                 parent.appendChild(container);
                 this.bindings.push(binding);
 

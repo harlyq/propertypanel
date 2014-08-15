@@ -1,4 +1,4 @@
-///<reference path="propertyeditor.ts"/>
+///<reference path='propertyeditor.ts'/>
 var PropertyPanel;
 (function (PropertyPanel) {
     var Panel = (function () {
@@ -10,7 +10,10 @@ var PropertyPanel;
             this.editing = null;
             this.objects = [];
             this.lastChild = null;
+            this.commitChanges = true;
             this.lastChild = parent.lastChild;
+
+            parent.addEventListener('click', this.onClick.bind(this));
         }
         Panel.prototype.setObjects = function (objects) {
             if (this.isArrayEqual(objects, this.objects))
@@ -44,6 +47,19 @@ var PropertyPanel;
             if (i !== -1)
                 this.definitionGroups.splice(i, 1);
             return this;
+        };
+
+        Panel.prototype.onClick = function (e) {
+            var elem = e.target;
+            var found = false;
+
+            while (elem && elem instanceof HTMLElement && !found) {
+                found = elem.classList.contains('PropertyPanelElement');
+                if (!found)
+                    elem = elem.parentNode;
+            }
+            if (found)
+                this.startEdit(this.findBinding(elem));
         };
 
         Panel.prototype.findBinding = function (container) {
@@ -108,7 +124,7 @@ var PropertyPanel;
             if (binding !== this.editing)
                 return;
 
-            if (typeof this.onInput === "function") {
+            if (typeof this.onInput === 'function') {
                 var event = {
                     objects: binding.objects.slice(),
                     prop: binding.definition.prop,
@@ -116,19 +132,30 @@ var PropertyPanel;
                 };
                 this.onInput(event);
             }
+
+            if (this.commitChanges) {
+                binding.setValue(value);
+            }
         };
 
         Panel.prototype.editorChange = function (binding, value) {
             if (binding !== this.editing)
                 return;
 
-            if (typeof this.onChange === "function") {
+            if (typeof this.onChange === 'function') {
                 var event = {
                     objects: binding.objects.slice(),
                     prop: binding.definition.prop,
                     value: value
                 };
                 this.onChange(event);
+            }
+
+            if (this.commitChanges) {
+                binding.setValue(value);
+
+                if (this['editing'] && this.editing['editor'] && typeof this.editing.editor.refresh === 'function')
+                    this.editing.editor.refresh(this.editing);
             }
 
             this.editing = null;
@@ -150,27 +177,32 @@ var PropertyPanel;
         };
 
         Panel.prototype.startEdit = function (binding) {
-            if (binding.editor !== null && typeof binding.editor === "object") {
+            if (binding.editor !== null && typeof binding.editor === 'object') {
                 if (binding === this.editing)
                     return;
 
-                if (typeof this.editing.editor.startEdit === "function") {
+                this.stopEdit();
+
+                if (typeof binding.editor.startEdit === 'function') {
                     this.editing = binding;
-                    binding.editor.startEdit(binding, function (binding, value) {
-                    });
+                    binding.editor.startEdit(binding, this.editorChange.bind(this), this.editorInput.bind(this));
                 }
             }
         };
 
-        Panel.prototype.stopEdit = function (reason) {
-            if (this["editing"] && this.editing["editor"] && typeof this.editing.editor.stopEdit === "function") {
-                this.editing.editor.stopEdit(this.editing, reason);
+        Panel.prototype.stopEdit = function () {
+            if (this['editing'] && this.editing['editor']) {
+                if (typeof this.editing.editor.stopEdit === 'function')
+                    this.editing.editor.stopEdit(this.editing);
+
+                if (typeof this.editing.editor.refresh === 'function')
+                    this.editing.editor.refresh(this.editing);
             }
             this.editing = null;
         };
 
         Panel.prototype.destroyEditors = function () {
-            this.stopEdit(1 /* Cancel */);
+            this.stopEdit();
 
             // // in reverse, in case a later binding is dependent upon an earlier one
             // for (var i = this.bindings.length - 1; i >= 0; i--) {
@@ -181,7 +213,7 @@ var PropertyPanel;
             this.bindings.length = 0;
 
             // clean-up any elements added by buildEditors
-            if (typeof this.parent === "object") {
+            if (typeof this.parent === 'object') {
                 while (this.parent.lastChild != this.lastChild)
                     this.parent.removeChild(this.parent.lastChild);
             }
@@ -207,7 +239,7 @@ var PropertyPanel;
                     continue;
 
                 binding.container = container;
-                container.classList.add("PropertyPanelElement");
+                container.classList.add('PropertyPanelElement');
                 parent.appendChild(container);
                 this.bindings.push(binding);
 

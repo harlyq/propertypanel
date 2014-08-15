@@ -28,6 +28,12 @@ module PropertyPanel {
                 return null;
         }
 
+        setValue(value: any) {
+            for (var i = 0; i < this.objects.length; ++i) {
+                this.objects[i][this.definition.prop] = value;
+            }
+        }
+
         /*
          * @return {boolean} true, if all *prop* attribute of all *objects* is the same
          */
@@ -42,9 +48,9 @@ module PropertyPanel {
         }
     }
 
-    export enum Reason {
-        Commit, Cancel
-    };
+    // export enum Reason {
+    //     Commit, Cancel
+    // };
 
     /*
      * @class Editor
@@ -98,6 +104,10 @@ module PropertyPanel {
         //shutdown(binding: Binding) {}
 
         /*
+         */
+        refresh(binding: Binding) {}
+
+        /*
          * Called before removal of the editor from the panel
          */
         startEdit(binding: Binding,
@@ -108,7 +118,8 @@ module PropertyPanel {
          * Called after startEdit() to indicate the edit mode has finished.
          * stopEdit() can be called from within the editor code to indicate that editing is complete.
          */
-        stopEdit(binding: Binding, reason: Reason) {}
+        stopEdit(binding: Binding) {}
+
     }
 
     // export interface Editor {
@@ -124,9 +135,15 @@ module PropertyPanel {
 
     export class DefaultEditor extends Editor {
         createElement(binding: Binding): HTMLElement {
-            var textElem = document.createElement("text");
-            textElem.innerHTML = '<span class="PropertyEditorName">' + binding.definition.prop + ': </span>' +
-                '<span class="PropertyEditorValue">' + binding.getValue() + '</span>';
+            var textElem = document.createElement('text');
+            var htmlString = (binding.isSameValue() ? binding.getValue() : '----');
+
+            textElem.innerHTML =
+                '<style>' +
+                '  .inputElem {position: fixed}' +
+                '</style>' +
+                '<span class="PropertyEditorName">' + binding.definition.prop + ': </span>' +
+                '<span class="PropertyEditorValue">' + htmlString + '</span>';
 
             return textElem;
         }
@@ -135,16 +152,75 @@ module PropertyPanel {
             return true; // supports any type
         }
 
+        refresh(binding: Binding) {
+            var valueElem = < HTMLElement > binding.container.querySelector('.PropertyEditorValue');
+            if (valueElem === null)
+                return;
+
+            valueElem.innerHTML = (binding.isSameValue() ? binding.getValue() : '----');
+        }
+
         startEdit(binding: Binding,
             onChange: (binding: Binding, value: any) => void,
             onInput: (binding: Binding, value: any) => void) {
 
+            var valueElem = binding.container.querySelector('.PropertyEditorValue');
+            if (valueElem === null)
+                return;
+
+            var rectObject = valueElem.getBoundingClientRect();
+            var value = binding.getValue();
+            var inputElem = document.createElement('input');
+
+            if (!binding.isSameValue())
+                value = '----';
+
+            // place inputElem on top of the valueElem
+            inputElem.classList.add('inputElem');
+            inputElem.classList.add('PropertyEditorEdit');
+            inputElem.style.top = rectObject.top + 'px';
+            inputElem.style.left = rectObject.left + 'px';
+            inputElem.value = value.toString();
+            inputElem.type = 'input';
+
+            inputElem.addEventListener('input', function(e) {
+                if (typeof onInput === 'function')
+                    onInput(binding, ( < HTMLInputElement > e.target).value);
+            });
+
+            var self = this;
+            inputElem.addEventListener('keypress', function(e) {
+                if (e.keyCode === 13) {
+                    if (typeof onChange === 'function')
+                        onChange(binding, inputElem.value);
+
+                    self.stopEdit(binding);
+                }
+            });
+
+
+            binding.container.appendChild(inputElem);
+
+            inputElem.setSelectionRange(0, inputElem.value.length);
+            inputElem.focus();
+        }
+
+        stopEdit(binding: Binding) {
+            var inputElem = binding.container.querySelector('.PropertyEditorEdit');
+            if (inputElem === null)
+                return;
+
+            // if (reason === Reason.Commit) {
+            //     this.onChange(binding, inputElem.value);
+            // }
+
+            binding.container.removeChild(inputElem);
         }
     }
 
     export class ObjectEditor extends Editor {
         createElement(binding: Binding): HTMLElement {
-            var container = document.createElement("div");
+            var container = document.createElement('div');
             container.innerHTML =
                 '<style>' +
                 '    [data-state="closed"]:before { content: "+" }' +
@@ -154,7 +230,7 @@ module PropertyPanel {
                 '</style>' +
                 '<div class="ObjectEditor PropertyEditorName" data-state="closed">' + binding.definition.prop + '</div>';
 
-            container.querySelector(".ObjectEditor").addEventListener("click", this.toggleState);
+            container.querySelector('.ObjectEditor').addEventListener('click', this.toggleState);
 
             return container;
         }
@@ -162,8 +238,8 @@ module PropertyPanel {
         toggleState(e) {
             e.preventDefault();
             var elem = ( < HTMLElement > e.target);
-            var isClosed = elem.getAttribute("data-state") === "closed";
-            elem.setAttribute("data-state", (isClosed ? "open" : "closed"));
+            var isClosed = elem.getAttribute('data-state') === 'closed';
+            elem.setAttribute('data-state', (isClosed ? 'open' : 'closed'));
         }
 
         canHandle(value: any): boolean {
